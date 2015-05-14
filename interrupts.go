@@ -1,6 +1,7 @@
 package gointhandler
 
 import (
+	"errors"
 	"log"
 	"os"
 	"os/signal"
@@ -21,6 +22,12 @@ var interruptChannel = make(chan os.Signal, 1)
 
 func InterruptTheApp() {
 	interruptChannel <- os.Interrupt
+	time.Sleep(time.Millisecond * 20)
+}
+
+// convenience
+func IsTimeToStop() bool {
+	return *StopPointer
 }
 
 func TakeCareOfInterrupts(ignoreSIGALRM bool) {
@@ -57,4 +64,22 @@ func TakeCareOfInterrupts(ignoreSIGALRM bool) {
 		log.Fatalln("forced shutdown after waiting for", MaxTimeToWaitForCleanup.Seconds(), "seconds")
 		os.Exit(0)
 	}()
+}
+
+var CancelError = errors.New("canceled")
+
+// returns true if was canceled
+func Sleep(duration time.Duration, cancelChannel ...chan struct{}) error {
+	var cc chan struct{} = make(chan struct{})
+	if len(cancelChannel) > 0 {
+		cc = cancelChannel[0]
+	}
+	select {
+	case <-time.After(duration):
+		return nil
+	case <-StopChannel:
+		return errors.New("time to shutdown")
+	case <-cc:
+		return CancelError
+	}
 }
